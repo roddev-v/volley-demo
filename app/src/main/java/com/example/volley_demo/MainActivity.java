@@ -1,48 +1,90 @@
 package com.example.volley_demo;
 
+import android.content.ContentResolver;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Base64;
+import android.widget.Button;
+import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.android.volley.Request;
 import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.JsonArrayRequest;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
-import com.example.models.User;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
-import java.lang.reflect.Type;
-import java.util.List;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
 
 public class MainActivity extends AppCompatActivity {
-
     private RequestQueue requestQueue;
+    private final ActivityResultLauncher<String> mGetContent = registerForActivityResult(new ActivityResultContracts.GetContent(),
+            uri -> {
+                final String base64 = fileUriToBase64(uri, getContentResolver());
+                uploadFile(base64);
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        // initializre coada pentru request-uri
         requestQueue = Volley.newRequestQueue(this);
-        this.getUsers();
+        Button uploadFile = findViewById(R.id.uploadFile);
+        uploadFile.setOnClickListener(view -> selectFile());
     }
 
-    private void getUsers() {
-        // facem call-ul HTTP de GET
-        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest(
-                "https://jsonplaceholder.typicode.com/users",
+    private void uploadFile(String file) {
+        JSONObject j = new JSONObject();
+        try {
+            j.put("file", file);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(
+                Request.Method.POST,
+                "http://localhost:3000/upload",
+                j,
+                null,
                 response -> {
-                    // In response ai lista de obiecte simple. le poti accesa folosind
-                    //response.getJSONObject(i); unde i reprezeinta index-ul obiectului din array. Tot ce vine aici in response e obiect plain
-                    // Aici dfinim un obiect Java de un Type custom. Avem nevoie de clasle POJO
-                    // Se aplica doar pentru liste
-
-                    Type listType = new TypeToken<List<User>>(){}.getType();
-                    List<User> users = new Gson().fromJson(response.toString(), listType);
-                },
-                null
+                    Toast.makeText(this, response.toString(), Toast.LENGTH_LONG).show();
+                }
         );
-        requestQueue.add(jsonArrayRequest);
+        requestQueue.add(jsonObjectRequest);
+    }
+
+    private void selectFile() {
+        mGetContent.launch("application/pdf");
+    }
+
+    private String fileUriToBase64(Uri uri, ContentResolver resolver) {
+        String encodedBase64 = "";
+        try {
+            byte[] bytes = readBytes(uri, resolver);
+            encodedBase64 = Base64.encodeToString(bytes, 0);
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+        return encodedBase64;
+    }
+
+    private static byte[] readBytes(Uri uri, ContentResolver resolver)
+            throws IOException {
+        InputStream inputStream = resolver.openInputStream(uri);
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+        int len = 0;
+        while ((len = inputStream.read(buffer)) != -1) {
+            byteBuffer.write(buffer, 0, len);
+        }
+        return byteBuffer.toByteArray();
     }
 }
